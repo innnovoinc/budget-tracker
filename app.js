@@ -50,7 +50,8 @@
     if (!data.months[key]) {
       const prevKey = Object.keys(data.months).filter(k=>/^\d{4}-\d{2}$/.test(k)&&k<key).sort().at(-1);
       const prev = prevKey ? data.months[prevKey] : null;
-      data.months[key] = {income:prev ? safeAmount(prev.income) : 0, budgets:prev && prev.budgets ? structuredClone(prev.budgets) : {}, utilityOverride:null, includeCardPayments:false, entries:[]};
+      // New months start with no category allocations; users copy the previous calendar month on demand.
+      data.months[key] = {income:prev ? safeAmount(prev.income) : 0, budgets:{}, utilityOverride:null, includeCardPayments:false, entries:[]};
       save();
     }
     const month = data.months[key];
@@ -61,6 +62,9 @@
   const month = () => getMonth(shownMonth);
   const utilities = () => month().utilityOverride ?? data.utilityDefaults;
   const utilityForecast = () => utilities().reduce((s,u)=>s+safeAmount(u.amount),0);
+  // Count each estimated utility dollar only until it has been replaced by a counted Utilities expense.
+  // The unspent estimate fills the grey portion of the Needs meter without double counting payments.
+  const utilityRemainingEstimate = () => Math.max(0, Math.round((utilityForecast()-categoryTotal('Utilities','needs'))*100)/100);
   // Card payments normally repay purchases already recorded as expenses.
   // A single per-month switch can intentionally include them if desired.
   const isCountedExpense = e => e.kind==='expense' && (!e.cardPayment || month().includeCardPayments===true);
@@ -81,27 +85,31 @@
     renderGoals(); renderCardPayments(); renderCategorySelect(); renderCategories(); renderUtilities(); renderBudgets(); renderEntries(); renderCategoryManager();
   }
   function renderGoals() {
-    const income = safeAmount(month().income);
-    const goals = [
-      {bucket:'needs',label:'Needs',pct:0.5,color:'var(--blue)',actual:total('needs')},
+    const income=safeAmount(month().income);
+    const pendingUtilities=utilityRemainingEstimate();
+    const needsSpent=total('needs');
+    const goals=[
+      {bucket:'needs',label:'Needs',pct:0.5,color:'var(--blue)',actual:needsSpent},
       {bucket:'wants',label:'Wants',pct:0.3,color:'var(--orange)',actual:total('wants')},
       {bucket:'savings',label:'Savings left',pct:0.2,color:'var(--green)',actual:calculatedSavings()}
     ];
     $('goals').innerHTML=goals.map(g=>{
-      const goal=income*g.pct, over=g.bucket!=='savings' && income>0 && g.actual>goal;
-      let foot;
-      if (income<=0) foot='Set income to see goal';
-      else if(g.bucket==='savings') foot=g.actual<0?`${shortMoney(-g.actual)} deficit`:g.actual>=goal?`${shortMoney(g.actual-goal)} above goal`:`${shortMoney(goal-g.actual)} below goal`;
-      else foot=over?`${shortMoney(g.actual-goal)} over goal`:`${shortMoney(goal-g.actual)} left`;
-      return `<article class="goal-card"><div class="goal-name">${g.label}</div><div class="goal-value ${over || (g.bucket==='savings' && g.actual<goal && income>0)?'over-budget':''}">${shortMoney(g.actual)}</div><div class="goal-sub">of ${shortMoney(goal)} goal</div><div class="meter"><span style="width:${progress(g.actual,goal)}%;background:${g.color}"></span></div><div class="goal-foot ${over?'over-budget':''}">${foot}</div></article>`;
+      const goal=income*g.pct, over=g.bucket!=='savings' && income>0 && (g.bucket==='needs'?needsSpent+pendingUtilities:g.actual)>goal;
+      const foot=g.bucket==='needs' && pendingUtilities>0 ? `<div class="goal-foot"><i class="dot utility-dot"></i> ${shortMoney(pendingUtilities)} utilities</div>` : '';
+      const goalText=income>0?`<div class="goal-sub">/ ${shortMoney(goal)}</div>`:'';
+      let bar;
+      if (g.bucket==='needs') {
+        const actualWidth=progress(needsSpent,goal);
+        const forecastWidth=goal>0 ? Math.max(0,Math.min(100-actualWidth, pendingUtilities/goal*100)) : 0;
+        bar=`<div class="meter meter-stacked" role="img" aria-label="Needs: ${money(needsSpent)} recorded, ${money(pendingUtilities)} estimated utilities, target ${money(goal)}"><span class="meter-actual" style="width:${actualWidth}%"></span><span class="meter-forecast" style="width:${forecastWidth}%"></span></div>`;
+      } else {
+        bar=`<div class="meter"><span style="width:${progress(g.actual,goal)}%;background:${g.color}"></span></div>`;
+      }
+      return `<article class="goal-card"><div class="goal-name">${g.label}</div><div class="goal-value ${over || (g.bucket==='savings' && g.actual<goal && income>0)?'over-budget':''}">${shortMoney(g.actual)}</div>${goalText}${bar}${foot}</article>`;
     }).join('');
   }
   function renderCardPayments() {
-    const tagged=month().entries.filter(e=>e.kind==='expense' && e.cardPayment);
-    const amount=tagged.reduce((sum,e)=>sum+safeAmount(e.amount),0);
-    $('cardPaymentSummary').textContent=tagged.length?`${tagged.length} tagged · ${money(amount)}`:'None recorded this month';
     $('includeCardPayments').checked=month().includeCardPayments===true;
-    $('cardPaymentStatus').textContent=month().includeCardPayments===true?'Included in spending and savings':'Excluded from spending and savings';
   }
   function renderCategorySelect() {
     const el=$('category');
@@ -120,7 +128,6 @@
     $('categoryTotals').classList.toggle('hidden',!categoriesVisible);
     $('toggleCategories').textContent=categoriesVisible?'Hide':'Show';
     $('toggleCategories').setAttribute('aria-expanded',String(categoriesVisible));
-    $('categoryIntro').classList.toggle('hidden',categoriesVisible);
     if (!categoriesVisible) return;
     const rows=data.categories.map(c=>{
       const needs=categoryTotal(c,'needs'), wants=categoryTotal(c,'wants'), t=needs+wants;
@@ -129,8 +136,7 @@
       const matching=month().entries.filter(e=>e.kind==='expense'&&e.category===c).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
       const nText=`Needs ${money(needs)}${nBudget!==null?' / '+money(nBudget):''}`;
       const wText=c==='Utilities'?'':`Wants ${money(wants)}${wBudget!==null?' / '+money(wBudget):''}`;
-      const budgetHint=(c==='Utilities'?'Estimated utility budget':(nBudget===null&&wBudget===null?'No category limits set':'Budget progress shown as spent / limit'));
-      return `<div class="category-row"><div class="category-head"><span class="category-title">${esc(c)}</span><span class="category-amount">${money(t)}</span></div><div class="category-split"><span class="pill-need">${esc(nText)}</span>${c==='Utilities'?'':`<span class="pill-want">${esc(wText)}</span>`}</div><div class="category-meta">${esc(budgetHint)}</div><button class="category-toggle" data-category-toggle="${esc(c)}" aria-expanded="${detail}">${detail?'Hide':'See'} expenses ${detail?'−':'+'}</button>${detail?`<div class="category-transactions">${matching.length?matching.map(e=>`<div class="category-transaction ${isCountedExpense(e)?'':'excluded-entry'}"><span>${esc(e.description)} <span class="subtle">(${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment'+(isCountedExpense(e)?'':', not counted'):''})</span></span><strong>${money(e.amount)}</strong></div>`).join(''):'<p class="empty-state">No expenses in this category yet.</p>'}</div>`:''}</div>`;
+      return `<div class="category-row"><div class="category-head"><span class="category-title">${esc(c)}</span><span class="category-amount">${money(t)}</span></div><div class="category-split"><span class="pill-need">${esc(nText)}</span>${c==='Utilities'?'':`<span class="pill-want">${esc(wText)}</span>`}</div><button class="category-toggle" data-category-toggle="${esc(c)}" aria-expanded="${detail}">${detail?'Hide':'Show'} ${detail?'−':'+'}</button>${detail?`<div class="category-transactions">${matching.length?matching.map(e=>`<div class="category-transaction ${isCountedExpense(e)?'':'excluded-entry'}"><span>${esc(e.description)} <span class="subtle">(${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment'+(isCountedExpense(e)?'':', not counted'):''})</span></span><strong>${money(e.amount)}</strong></div>`).join(''):'<p class="empty-state">No expenses in this category yet.</p>'}</div>`:''}</div>`;
     }).join('');
     $('categoryTotals').innerHTML=rows||'<p class="empty-state">No categories yet.</p>';
   }
@@ -158,7 +164,7 @@
     const nAllocated=customCategories().reduce((s,c)=>s+(categoryBudget(c,'needs')??0),0)+utilityForecast();
     const wAllocated=customCategories().reduce((s,c)=>s+(categoryBudget(c,'wants')??0),0);
     const targetNeeds=safeAmount(month().income)*0.5, targetWants=safeAmount(month().income)*0.3;
-    $('budgetEditor').innerHTML=`<div class="editor-panel"><table class="budget-table"><thead><tr><th>Category</th><th>Needs budget</th><th>Wants budget</th></tr></thead><tbody>${rows}</tbody></table><div class="budget-summary"><div>Needs allocated: <strong>${money(nAllocated)}</strong> / ${money(targetNeeds)} goal <span class="subtle">(includes ${money(utilityForecast())} estimated utilities)</span></div><div>Wants allocated: <strong>${money(wAllocated)}</strong> / ${money(targetWants)} goal</div></div><p class="budget-info">Budgets save when you finish editing a field. New months copy the budgets from your most recent prior month; editing one month doesn't change other months.</p></div>`;
+    $('budgetEditor').innerHTML=`<div class="editor-panel"><table class="budget-table"><thead><tr><th>Category</th><th>Needs</th><th>Wants</th></tr></thead><tbody>${rows}</tbody></table><div class="budget-summary"><div>Needs <strong>${money(nAllocated)}</strong> / ${money(targetNeeds)}</div><div>Wants <strong>${money(wAllocated)}</strong> / ${money(targetWants)}</div></div></div>`;
   }
   function renderEntries() {
     const list=[...month().entries].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
@@ -168,8 +174,8 @@
       const symbol=e.kind==='savings'?'↗':e.cardPayment?'CC':(e.bucket==='needs'?'N':'W');
       const type=e.kind==='savings'?'savings':e.cardPayment?'card':e.bucket;
       const excluded=e.kind==='expense' && !isCountedExpense(e);
-      const note=e.kind==='savings'?'Recorded transfer (not used in calculated savings)':
-        `${esc(category)} · ${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment · '+(excluded?'Excluded':'Included'):''}`;
+      const note=e.kind==='savings'?'Savings transfer':
+        `${esc(category)} · ${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment':''}`;
       return `<div class="activity-row ${excluded?'excluded-entry':''}"><div class="activity-icon ${type}">${symbol}</div><div class="activity-middle"><div class="activity-description">${esc(e.description)}</div><div class="activity-sub">${note}</div></div><div class="activity-right"><div class="activity-value">${e.kind==='savings'?'+':''}${money(e.amount)}</div><div class="activity-actions"><button type="button" data-edit="${esc(e.id)}">Edit</button><button type="button" class="delete" data-delete="${esc(e.id)}">Delete</button></div></div></div>`;
     }).join(''):'<p class="empty-state">No transactions this month. Add your first expense above.</p>';
   }
@@ -184,7 +190,7 @@
     cancelEditing(); getMonth(); render();
   }
   function toggleKind(next) {
-    kind=next; $('expenseMode').classList.toggle('selected',kind==='expense'); $('savingMode').classList.toggle('selected',kind==='savings');
+    kind=next;
     $('expenseFields').classList.toggle('hidden',kind==='savings');
     $('cardPaymentField').classList.toggle('hidden',kind==='savings');
     $('submitEntry').textContent=editingId?'Save changes':(kind==='savings'?'+ Add savings':'+ Add expense');
@@ -263,14 +269,25 @@
   $('closeModal').addEventListener('click',closeModal);
   $('modalOverlay').addEventListener('click',e=>{if(e.target===$('modalOverlay'))closeModal();});
   $('incomeForm').addEventListener('submit',e=>{e.preventDefault();month().income=safeAmount($('incomeInput').value);save();render();closeModal();toast('Monthly income saved');});
-  $('expenseMode').addEventListener('click',()=>{if(editingId)cancelEditing();toggleKind('expense');});
-  $('savingMode').addEventListener('click',()=>{if(editingId)cancelEditing();toggleKind('savings');});
   $('category').addEventListener('change',syncUtilityBucket);
-  $('includeCardPayments').addEventListener('change',e=>{month().includeCardPayments=e.target.checked;save();render();toast(e.target.checked?'Card payments now counted':'Card payments excluded');});
+  $('includeCardPayments').addEventListener('change',e=>{month().includeCardPayments=e.target.checked;save();render();});
   $('entryForm').addEventListener('submit',addExpense);
   $('cancelEdit').addEventListener('click',cancelEditing);
   $('toggleCategories').addEventListener('click',()=>{categoriesVisible=!categoriesVisible;renderCategories();});
   $('categoryTotals').addEventListener('click',e=>{const btn=e.target.closest('[data-category-toggle]');if(!btn)return;expandedCategory=expandedCategory===btn.dataset.categoryToggle?null:btn.dataset.categoryToggle;renderCategories();});
+  $('copyLastMonth').addEventListener('click',()=>{
+    const [y,m]=shownMonth.split('-').map(Number);
+    const prior=new Date(y,m-2,1);
+    const key=prior.getFullYear()+'-'+String(prior.getMonth()+1).padStart(2,'0');
+    const source=data.months[key];
+    if (!source?.budgets || !Object.keys(source.budgets).length) {toast('No category budgets in '+monthLabel(key));return;}
+    const existing=month().budgets;
+    if (Object.keys(existing).some(c=>Object.values(existing[c]||{}).some(v=>v!==null&&v!==undefined&&v!=='')) &&
+        !confirm('Replace category budgets for '+monthLabel(shownMonth)+'?')) return;
+    month().budgets={};
+    for (const c of customCategories()) if(source.budgets[c]) month().budgets[c]=structuredClone(source.budgets[c]);
+    save();budgetsVisible=true;renderBudgets();renderCategories();toast('Copied '+monthLabel(key)+' budgets');
+  });
   $('toggleBudgets').addEventListener('click',()=>{budgetsVisible=!budgetsVisible;renderBudgets();});
   $('budgetEditor').addEventListener('change',e=>{
     const el=e.target.closest('[data-budget-category]');if(!el)return;

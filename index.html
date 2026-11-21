@@ -25,46 +25,39 @@
     <main>
       <section class="month-bar" aria-label="Select month">
         <button id="prevMonth" class="chevron" aria-label="Previous month">‹</button>
-        <div class="month-name"><span id="monthLabel"></span><span class="month-subtext">Monthly overview</span></div>
+        <div class="month-name"><span id="monthLabel"></span></div>
         <button id="nextMonth" class="chevron" aria-label="Next month">›</button>
       </section>
 
       <section class="card income-card">
         <div class="section-heading"><span>Expected monthly income</span><button class="text-button" id="editIncome">Edit</button></div>
         <div id="incomeValue" class="income-amount">$0</div>
-        <p class="hint">Your 50 / 30 / 20 goals are based on this amount.</p>
         <div class="split-bar" aria-label="50 percent needs, 30 percent wants, 20 percent savings"><span class="need-bg" style="width:50%"></span><span class="want-bg" style="width:30%"></span><span class="save-bg" style="width:20%"></span></div>
         <div class="legend"><span><i class="dot need-bg"></i> Needs 50%</span><span><i class="dot want-bg"></i> Wants 30%</span><span><i class="dot save-bg"></i> Savings 20%</span></div>
       </section>
 
       <section class="goal-grid" id="goals" aria-label="Budget progress"></section>
-      <p class="dashboard-note">Savings left = monthly income − recorded Needs and Wants. Utility estimates are not deducted until paid.</p>
-      <section class="card card-payment-settings">
-        <div class="section-heading"><h2>Credit card payments</h2><span id="cardPaymentSummary" class="subtle"></span></div>
-        <label class="setting-toggle"><span><strong>Count card payments in totals</strong><small id="cardPaymentStatus">Excluded from spending and savings</small></span><input id="includeCardPayments" type="checkbox" role="switch" aria-label="Count credit card payments in this month's spending and savings totals" /></label>
-        <p class="hint">Payments tagged below are excluded by default to avoid double counting card purchases. This switch applies only to the selected month.</p>
+      <section class="card-payment-settings" aria-label="Card payment options">
+        <label class="setting-toggle"><span>Add credit card payments</span><input id="includeCardPayments" type="checkbox" role="switch" aria-label="Add credit card payments to monthly totals" /></label>
       </section>
 
       <section class="card add-card">
         <div class="section-heading"><h2>Quick add</h2></div>
         <form id="entryForm" autocomplete="off">
-          <div class="kind-switch" role="group" aria-label="Record type"><button id="expenseMode" type="button" class="selected">Expense</button><button id="savingMode" type="button">Savings</button></div>
           <div class="entry-grid"><label class="field stretch"><span>Description</span><input id="description" maxlength="80" placeholder="e.g. Groceries" required /></label><label class="field amount-field"><span>Amount</span><div class="input-prefix"><span>$</span><input id="amount" inputmode="decimal" type="number" min="0.01" step="0.01" placeholder="0.00" required /></div></label></div>
           <div id="expenseFields" class="entry-grid second-row"><label class="field stretch"><span>Category</span><select id="category"></select></label><label class="field split-field"><span>Type</span><select id="bucket"><option value="needs">Needs</option><option value="wants">Wants</option></select></label></div>
-          <div id="cardPaymentField" class="card-payment-field"><label class="card-payment-check"><input type="checkbox" id="cardPayment" /><span><strong>Credit card payment</strong><small>Tag this as a card payment (excluded by default).</small></span></label></div>
+          <div id="cardPaymentField" class="card-payment-field"><label class="card-payment-check"><input type="checkbox" id="cardPayment" /><span><strong>Credit card payment</strong></span></label></div>
           <div class="form-actions"><button id="cancelEdit" class="secondary-button hidden" type="button">Cancel</button><button class="primary-button" id="submitEntry" type="submit">+ Add expense</button></div>
         </form>
       </section>
 
       <section class="card">
         <div class="section-heading"><h2>Category totals</h2><button class="text-button" id="toggleCategories" aria-expanded="false">Show</button></div>
-        <p class="hint" id="categoryIntro">See monthly totals and individual transactions for each category.</p>
         <div id="categoryTotals" class="hidden"></div>
       </section>
 
       <section class="card utility-card">
         <div class="section-heading"><h2>Expected utilities <span class="muted-tag">Needs</span></h2></div>
-        <p class="hint">Recurring Needs estimates are greyed out and carry over every month. They count toward your planned Needs budget, but not actual spending until you record a utility payment.</p>
         <div id="utilityRows"></div>
         <div class="utility-total"><span>Monthly utility estimate</span><strong id="utilityTotal">$0.00</strong></div>
         <div class="utility-actions"><button id="editMonthUtilities" class="small-button">Change this month</button><button id="editDefaultUtilities" class="small-button">Edit recurring defaults</button><button id="resetUtilities" class="small-button hidden">Use defaults</button></div>
@@ -72,8 +65,7 @@
       </section>
 
       <section class="card" id="budgetsCard">
-        <div class="section-heading"><h2>Category budgets</h2><button class="text-button" id="toggleBudgets" aria-expanded="false">Adjust</button></div>
-        <p class="hint">Give each category a separate monthly Needs and Wants limit. For example, Food can be $400 for Needs and $150 for Wants. Blank means no budget set.</p>
+        <div class="section-heading"><h2>Category budgets</h2><div class="budget-head-actions"><button class="text-button" id="copyLastMonth">Copy last month</button><button class="text-button" id="toggleBudgets" aria-expanded="false">Adjust</button></div></div>
         <div id="budgetEditor" class="hidden"></div>
       </section>
 
@@ -84,16 +76,14 @@
 
       <section id="settingsPanel" class="card hidden">
         <div class="section-heading"><h2>Settings & backup</h2><button id="closeSettings" class="text-button">Close</button></div>
-        <h3>Categories</h3><p class="hint">Use any category as Needs or Wants, except Utilities, which stays under Needs.</p>
+        <h3>Categories</h3>
         <div id="categoryManager"></div>
         <form id="addCategoryForm" class="inline-form"><input id="newCategory" maxlength="35" placeholder="New category name" required /><button type="submit" class="small-button">Add</button></form>
         <hr />
         <h3>Protect your data</h3>
-        <p class="hint">Savings left is recalculated from income minus counted Needs and Wants expenses. Card payments can be excluded or included with the selected month's switch. Your changes save automatically on this device whenever you add or edit an entry, budget, utility estimate, or income amount. No account, tracking, or cloud sync. Clearing website/app data or removing the app can erase records, so export a backup occasionally.</p>
         <div class="utility-actions"><button id="exportBackup" class="small-button">Download backup</button><button id="exportCsv" class="small-button">Download CSV</button><label class="small-button file-button" for="importBackup">Import backup</label><input id="importBackup" class="visually-hidden" type="file" accept=".json,application/json" /></div>
       </section>
 
-      <p class="footer-note">Private by default · Stored on this device · Works offline after installation</p>
     </main>
   </div>
   <div id="modalOverlay" class="modal-overlay hidden" role="presentation"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="section-heading"><h2 id="modalTitle">Monthly income</h2><button id="closeModal" class="icon-button" aria-label="Close">×</button></div><form id="incomeForm"><label class="field"><span>Expected income for this month</span><div class="input-prefix"><span>$</span><input id="incomeInput" type="number" min="0" step="0.01" inputmode="decimal" required /></div></label><button class="primary-button full-width" type="submit">Save income</button></form></div></div>

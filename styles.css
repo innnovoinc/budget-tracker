@@ -24,3 +24,28 @@
 .activity-icon.card{background:#eef1f4;color:#5c6876;font-size:11px}
 .excluded-entry .activity-value,.excluded-entry.category-transaction strong{color:#8a939c}
 .excluded-entry .activity-icon{opacity:.76}
+
+/* v4 compact dashboard: grey utility forecast next to recorded Needs spend */
+.meter-stacked{display:flex;gap:0;align-items:stretch}
+.meter-stacked .meter-actual{height:100%;background:var(--blue);border-radius:50px 0 0 50px;flex-shrink:0}
+.meter-stacked .meter-forecast{height:100%;background:#a2aab4;border-radius:0 50px 50px 0;flex-shrink:0}
+.meter-stacked .meter-actual:only-child,.meter-stacked .meter-forecast:first-child{border-radius:50px}
+.utility-dot{background:#a2aab4;vertical-align:middle;margin-right:2px}
+.goal-foot{white-space:nowrap;font-size:10px}
+.card-payment-settings{margin-top:-3px;margin-bottom:12px;padding:10px 13px;border:1px solid var(--border);border-radius:13px;background:white}
+.card-payment-settings .setting-toggle{font-size:12px;font-weight:650;color:var(--text)}
+.card-payment-settings .setting-toggle span{display:block}
+.budget-head-actions{display:flex;align-items:center;gap:12px}
+.budget-head-actions .text-button{font-size:11px;white-space:nowrap}
+.card .section-heading{gap:7px}
+.card-payment-field{padding:7px 10px;margin-top:9px}
+.card-payment-check{font-size:12px}
+.card-payment-check span{display:block}
+.income-card{padding-bottom:14px}
+.goal-card{padding:11px 9px}
+.goal-name{margin-bottom:4px}
+.goal-sub{margin-top:2px}
+.goal-card .meter{margin:8px 0 4px}
+.category-row{padding:9px 0}
+.category-split{margin-top:5px}
+.utility-item{padding:8px 0}

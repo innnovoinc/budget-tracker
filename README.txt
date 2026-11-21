@@ -5,22 +5,27 @@ What is included
 ----------------
 - 50/30/20 monthly dashboard for Needs, Wants, and dynamically calculated Savings left.
   Savings left = expected monthly income minus counted Needs and Wants spending;
-  it updates immediately with added, edited, or deleted expenses.
+  it updates immediately with added, edited, or deleted expenses. It does not
+  subtract the grey utility forecasts until those expenses are recorded.
 - Custom expense categories: Food, Gas, Entertainment, Girlfriend, Utilities.
 - Separate, adjustable Needs and Wants monthly budgets for each custom category.
+  Use 'Copy last month' to import allocations from the previous calendar month;
+  new months start with blank category allocations (existing ones are preserved).
 - Category totals (expand to view transactions) for the selected month.
 - Recurring utility estimates (under Needs), shown in grey. Edit defaults or
-  override a single month. Estimates count toward the planned Needs budget but
-  are NOT counted as money spent until you enter a corresponding actual expense.
+  override a single month. The Needs dashboard bar shows recorded Needs in blue,
+  plus unspent utility estimates in grey. When a counted Utilities expense is
+  recorded, that amount replaces part of the grey forecast to avoid double
+  counting. Only recorded expenses reduce calculated savings.
   All actual Utilities entries are categorized as Needs.
-- Quick entry and editing of expenses and (optional) savings transfers.
+- Quick entry and editing of expenses only; older savings-transfer records are preserved.
 - Credit card payment checkbox on expenses. These transactions remain in history
   but are EXCLUDED from Needs, Wants, category totals, and calculated Savings
   unless you enable "Count card payments in totals" for that month. New months
   always default to excluding card payments. Existing untagged transactions
   keep counting as before.
-- Savings transfers are separate records and do not change calculated Savings left
-  (to avoid reducing savings twice).
+- Any old savings transfer records remain in history and do not change
+  calculated Savings left (to avoid reducing savings twice).
 - Monthly income, expenses, budgets and totals.
 - JSON backup/restore and a CSV transaction download, now including card-payment
   tagging and whether each payment was counted.
