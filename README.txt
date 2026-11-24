@@ -87,3 +87,20 @@ VERSION 5 — EXPENSE DATES & MONTHLY CALENDAR
   backup before publishing any update.
 • This update changes the service-worker cache version; fully close and reopen
   the installed app if the previous layout initially appears.
+
+VERSION 6 — BUDGET PROGRESS + IPHONE INPUT SCALE
+-----------------------------------------------
+• Dashboard Needs and Wants show spent vs goal, percent spent, and remaining.
+• The Needs bar still includes a grey forecast for unpaid expected utilities.
+  Its remaining amount reserves both actual expenses and pending utility estimates.
+• Expand Category totals to see spent, percentage, and remaining dollars for
+  each budgeted Needs/Wants category. No-budget categories say No budget set.
+• Over-budget amounts are highlighted red instead of negative money left.
+• Budget allocation summary identifies the percentage allocated and the
+  remaining allocation; allocations are not treated as spent.
+• Form inputs and selects use a minimum font size of 16 pixels to prevent
+  Safari's automatic zoom when tapping a field on iPhone. Standard pinch
+  zoom accessibility remains available.
+• All stored budget data remains in the same localStorage key and schema.
+• Versioned JS/CSS URLs plus a refreshed service worker ease updates.
+  Back up your data before uploading these files to the same GitHub repo.

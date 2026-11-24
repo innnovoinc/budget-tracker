@@ -80,3 +80,39 @@
 .calendar-add{margin-top:8px}
 @media(min-width:600px){.calendar-card{padding:18px}.calendar-day{height:78px}.calendar-date-num{font-size:13px}.calendar-date-amount{font-size:13px}}
 @media(max-width:350px){.calendar-weekdays,.calendar-grid{gap:3px}.calendar-day{height:58px;border-radius:7px}.calendar-date-amount{font-size:9px}}
+
+
+/* Version 6: clearly distinguish spent, percent spent, and available budget. */
+.goal-grid{display:flex;flex-direction:column;gap:10px}
+.goal-card.goal-card-wide{padding:15px 16px}
+.goal-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.goal-card-head .goal-name{font-size:16px;line-height:1.2;margin:0;font-weight:750}
+.goal-spend{font-weight:780;font-size:17px;letter-spacing:-.45px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.goal-spend span,.category-budget-amount>span{color:var(--muted);font-weight:550}
+.goal-card-wide .meter,.category-budget-row .meter{height:9px;margin:11px 0 8px}
+.budget-metrics{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;font-variant-numeric:tabular-nums}
+.budget-metrics strong{font-weight:750;white-space:nowrap}
+.remaining-tag{background:#e4f5e9;color:#1d6b39;padding:5px 10px;border-radius:9px;font-size:13px;font-weight:750;white-space:nowrap}
+.remaining-tag.remaining-over{background:#fee8e8;color:#a12e2e}
+.goal-card-wide .goal-foot{margin-top:7px;color:#727c87;font-size:11px}
+.savings-goal{background:linear-gradient(110deg,#fff,#eff9f4)}
+.savings-status{color:#536f61;font-size:12px;font-weight:650;text-align:right}
+.category-row{padding:13px 0}
+.category-amount{font-size:13px;color:#424e5b;white-space:nowrap}
+.category-comparisons{display:flex;flex-direction:column;gap:8px;margin-top:11px}
+.category-budget-row{border-radius:11px;background:#f7f9fb;padding:10px 11px}
+.category-budget-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.category-bucket-label{font-size:12px;font-weight:750;color:var(--blue)}
+.category-bucket-label.wants{color:#a16d25}
+.category-budget-amount{font-size:13px;font-weight:750;font-variant-numeric:tabular-nums;white-space:nowrap}
+.category-budget-row .budget-metrics{font-size:12px}
+.category-budget-row .remaining-tag{font-size:12px;padding:4px 8px}
+.budget-unset{font-size:11px;color:var(--muted);margin-top:6px}
+.category-toggle{margin-top:9px}
+.budget-summary .allocation-row+.allocation-row{padding-top:9px;margin-top:9px;border-top:1px solid var(--border)}
+.allocation-row{line-height:1.4}
+.allocation-row .budget-metrics{margin-top:5px;font-size:12px}
+.allocation-row .remaining-tag{font-size:12px;padding:3px 8px}
+/* iOS Safari zooms in on focused controls whose font size is below 16px. */
+input,select,textarea,.field input,.field select,.inline-form input,.utility-edit-row input,.budget-table input{font-size:16px!important}
+@media(max-width:350px){.goal-card.goal-card-wide{padding:12px}.goal-spend{font-size:15px}.budget-metrics{font-size:12px}.category-budget-row{padding:9px}.category-budget-amount{font-size:12px}}

@@ -114,29 +114,38 @@
     $('incomeValue').textContent = money(month().income);
     renderGoals(); renderCardPayments(); renderCategorySelect(); renderCategories(); renderUtilities(); renderBudgets(); renderEntries(); renderCategoryManager(); renderCalendar(); renderView();
   }
+  // Progress text is calculated from actual recorded spending. The grey portion
+  // of Needs reserves expected utilities which have not yet been paid.
+  const pctSpent = (spent, budget) => budget > 0 ? `${Math.round(spent / budget * 100)}% spent` : (spent > 0 ? 'Over budget' : '0% spent');
+  const budgetRemainder = (spent, budget) => {
+    const remaining = Math.round((budget - spent) * 100) / 100;
+    return `<span class="remaining-tag ${remaining < 0 ? 'remaining-over' : ''}">${remaining < 0 ? `${money(-remaining)} over` : `${money(remaining)} left`}</span>`;
+  };
   function renderGoals() {
-    const income=safeAmount(month().income);
-    const pendingUtilities=utilityRemainingEstimate();
-    const needsSpent=total('needs');
-    const goals=[
-      {bucket:'needs',label:'Needs',pct:0.5,color:'var(--blue)',actual:needsSpent},
-      {bucket:'wants',label:'Wants',pct:0.3,color:'var(--orange)',actual:total('wants')},
-      {bucket:'savings',label:'Savings left',pct:0.2,color:'var(--green)',actual:calculatedSavings()}
+    const income = safeAmount(month().income);
+    const pendingUtilities = utilityRemainingEstimate();
+    const needsSpent = total('needs');
+    const wantsSpent = total('wants');
+    const goals = [
+      {bucket:'needs',label:'Needs',actual:needsSpent,forecast:pendingUtilities,goal:income*0.5,color:'var(--blue)'},
+      {bucket:'wants',label:'Wants',actual:wantsSpent,forecast:0,goal:income*0.3,color:'var(--orange)'}
     ];
-    $('goals').innerHTML=goals.map(g=>{
-      const goal=income*g.pct, over=g.bucket!=='savings' && income>0 && (g.bucket==='needs'?needsSpent+pendingUtilities:g.actual)>goal;
-      const foot=g.bucket==='needs' && pendingUtilities>0 ? `<div class="goal-foot"><i class="dot utility-dot"></i> ${shortMoney(pendingUtilities)} utilities</div>` : '';
-      const goalText=income>0?`<div class="goal-sub">/ ${shortMoney(goal)}</div>`:'';
-      let bar;
-      if (g.bucket==='needs') {
-        const actualWidth=progress(needsSpent,goal);
-        const forecastWidth=goal>0 ? Math.max(0,Math.min(100-actualWidth, pendingUtilities/goal*100)) : 0;
-        bar=`<div class="meter meter-stacked" role="img" aria-label="Needs: ${money(needsSpent)} recorded, ${money(pendingUtilities)} estimated utilities, target ${money(goal)}"><span class="meter-actual" style="width:${actualWidth}%"></span><span class="meter-forecast" style="width:${forecastWidth}%"></span></div>`;
-      } else {
-        bar=`<div class="meter"><span style="width:${progress(g.actual,goal)}%;background:${g.color}"></span></div>`;
-      }
-      return `<article class="goal-card"><div class="goal-name">${g.label}</div><div class="goal-value ${over || (g.bucket==='savings' && g.actual<goal && income>0)?'over-budget':''}">${shortMoney(g.actual)}</div>${goalText}${bar}${foot}</article>`;
+    const expenses = goals.map(g => {
+      const committed = g.actual + g.forecast;
+      const hasTarget = income > 0;
+      const actualWidth = progress(g.actual,g.goal);
+      const forecastWidth = g.goal > 0 ? Math.max(0,Math.min(100-actualWidth,g.forecast/g.goal*100)) : 0;
+      const bar = g.bucket === 'needs' ?
+        `<div class="meter meter-stacked" role="img" aria-label="Needs: ${money(g.actual)} spent, ${money(g.forecast)} utilities estimated, budget ${money(g.goal)}"><span class="meter-actual" style="width:${actualWidth}%"></span><span class="meter-forecast" style="width:${forecastWidth}%"></span></div>` :
+        `<div class="meter" role="img" aria-label="Wants: ${money(g.actual)} spent, budget ${money(g.goal)}"><span style="width:${actualWidth}%;background:${g.color}"></span></div>`;
+      return `<article class="goal-card goal-card-wide"><div class="goal-card-head"><h3 class="goal-name">${g.label}</h3><div class="goal-spend">${money(g.actual)} <span>/ ${hasTarget ? money(g.goal) : '—'}</span></div></div>${bar}<div class="budget-metrics"><strong>${hasTarget ? pctSpent(g.actual,g.goal) : 'Set income'}</strong>${hasTarget ? budgetRemainder(committed,g.goal) : '<span class="budget-unset">No target yet</span>'}</div>${g.forecast>0?`<div class="goal-foot"><i class="dot utility-dot"></i> ${money(g.forecast)} utilities estimated (grey)</div>`:''}</article>`;
     }).join('');
+    const savings = calculatedSavings(), savingsGoal=income*0.2;
+    const savingsPct = income > 0 ? `${Math.round(savings/income*100)}% of income` : 'Set income';
+    const savingsProgress = progress(Math.max(0,savings),savingsGoal);
+    const difference = Math.round((savings-savingsGoal)*100)/100;
+    const savingsStatus=income>0 ? (difference>=0?`${money(difference)} above goal`:`${money(-difference)} below goal`) : '20% goal';
+    $('goals').innerHTML=expenses+`<article class="goal-card goal-card-wide savings-goal"><div class="goal-card-head"><h3 class="goal-name">Savings left</h3><div class="goal-spend ${savings < 0 ? 'over-budget' : ''}">${money(savings)}</div></div><div class="meter"><span style="width:${savingsProgress}%;background:var(--green)"></span></div><div class="budget-metrics"><strong>${savingsPct}</strong><span class="savings-status">${savingsStatus}</span></div></article>`;
   }
   function renderCardPayments() {
     $('includeCardPayments').checked=month().includeCardPayments===true;
@@ -211,19 +220,29 @@
     }).join('');
     panel.innerHTML=`<div class="section-heading"><h2>${esc(label)}</h2><strong>${money(spendingForDay(day))}</strong></div>${list || '<p class="empty-state">No expenses</p>'}<button type="button" class="small-button calendar-add" data-calendar-add="${day}">+ Add expense</button>`;
   }
+  function categoryComparison(label, spent, budget, bucket, isUtility=false) {
+    if (budget === null) {
+      return `<div class="category-budget-row"><div class="category-budget-head"><span class="category-bucket-label ${bucket}">${label}</span><span class="category-budget-amount">${money(spent)} spent</span></div><div class="budget-unset">No budget set</div></div>`;
+    }
+    const actualWidth = progress(spent,budget);
+    const forecastWidth = isUtility && budget>0 ? Math.max(0,Math.min(100-actualWidth,(Math.max(0,budget-spent)/budget)*100)) : 0;
+    const bar = isUtility ?
+      `<div class="meter meter-stacked" role="img" aria-label="Utilities: ${money(spent)} spent, ${money(Math.max(0,budget-spent))} estimated, ${money(budget)} budget"><span class="meter-actual" style="width:${actualWidth}%"></span><span class="meter-forecast" style="width:${forecastWidth}%"></span></div>` :
+      `<div class="meter" role="img" aria-label="${esc(label)}: ${money(spent)} spent of ${money(budget)} budget"><span style="width:${actualWidth}%;background:${bucket==='wants'?'var(--orange)':'var(--blue)'}"></span></div>`;
+    return `<div class="category-budget-row"><div class="category-budget-head"><span class="category-bucket-label ${bucket}">${label}</span><span class="category-budget-amount">${money(spent)} <span>/ ${money(budget)}</span></span></div>${bar}<div class="budget-metrics"><strong>${pctSpent(spent,budget)}</strong>${budgetRemainder(spent,budget)}</div></div>`;
+  }
   function renderCategories() {
     $('categoryTotals').classList.toggle('hidden',!categoriesVisible);
     $('toggleCategories').textContent=categoriesVisible?'Hide':'Show';
     $('toggleCategories').setAttribute('aria-expanded',String(categoriesVisible));
     if (!categoriesVisible) return;
     const rows=data.categories.map(c=>{
-      const needs=categoryTotal(c,'needs'), wants=categoryTotal(c,'wants'), t=needs+wants;
+      const needs=categoryTotal(c,'needs'), wants=categoryTotal(c,'wants'), totalSpent=needs+wants;
       const nBudget=categoryBudget(c,'needs'), wBudget=categoryBudget(c,'wants');
       const detail=expandedCategory===c;
       const matching=month().entries.filter(e=>e.kind==='expense'&&e.category===c).sort((a,b)=>entryDate(b).localeCompare(entryDate(a)) || (b.createdAt||'').localeCompare(a.createdAt||''));
-      const nText=`Needs ${money(needs)}${nBudget!==null?' / '+money(nBudget):''}`;
-      const wText=c==='Utilities'?'':`Wants ${money(wants)}${wBudget!==null?' / '+money(wBudget):''}`;
-      return `<div class="category-row"><div class="category-head"><span class="category-title">${esc(c)}</span><span class="category-amount">${money(t)}</span></div><div class="category-split"><span class="pill-need">${esc(nText)}</span>${c==='Utilities'?'':`<span class="pill-want">${esc(wText)}</span>`}</div><button class="category-toggle" data-category-toggle="${esc(c)}" aria-expanded="${detail}">${detail?'Hide':'Show'} ${detail?'−':'+'}</button>${detail?`<div class="category-transactions">${matching.length?matching.map(e=>`<div class="category-transaction ${isCountedExpense(e)?'':'excluded-entry'}"><span>${esc(e.description)} <span class="subtle">(${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment'+(isCountedExpense(e)?'':', not counted'):''})</span></span><strong>${money(e.amount)}</strong></div>`).join(''):'<p class="empty-state">No expenses in this category yet.</p>'}</div>`:''}</div>`;
+      const comparisons=categoryComparison('Needs',needs,nBudget,'needs',c==='Utilities')+(c==='Utilities'?'':categoryComparison('Wants',wants,wBudget,'wants'));
+      return `<div class="category-row"><div class="category-head"><span class="category-title">${esc(c)}</span><span class="category-amount">${money(totalSpent)} spent</span></div><div class="category-comparisons">${comparisons}</div><button class="category-toggle" data-category-toggle="${esc(c)}" aria-expanded="${detail}">${detail?'Hide expenses −':'Show expenses +'}</button>${detail?`<div class="category-transactions">${matching.length?matching.map(e=>`<div class="category-transaction ${isCountedExpense(e)?'':'excluded-entry'}"><span>${esc(e.description)} <span class="subtle">(${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment'+(isCountedExpense(e)?'':', not counted'):''})</span></span><strong>${money(e.amount)}</strong></div>`).join(''):'<p class="empty-state">No expenses in this category yet.</p>'}</div>`:''}</div>`;
     }).join('');
     $('categoryTotals').innerHTML=rows||'<p class="empty-state">No categories yet.</p>';
   }
@@ -239,6 +258,13 @@
     $('utilityEditor').innerHTML=`<div class="editor-panel"><div class="editor-title">${esc(title)}</div><form id="utilityForm"><div id="editableUtilities">${editing.map(u=>utilityEditorRow(u)).join('')}</div><div class="utility-actions" style="margin-top:10px"><button type="button" class="small-button" id="addUtilityRow">+ Utility</button><button type="button" class="small-button" id="cancelUtilities">Cancel</button><button type="submit" class="primary-button" style="min-height:36px;padding:9px 12px">Save</button></div></form></div>`;
   }
   function utilityEditorRow(u) {return `<div class="utility-edit-row" data-utility-id="${esc(u.id)}"><input name="utilityName" maxlength="35" aria-label="Utility name" placeholder="Utility" value="${esc(u.name)}" required /><input name="utilityAmount" type="number" min="0" step="0.01" inputmode="decimal" aria-label="Utility amount" placeholder="0.00" value="${safeAmount(u.amount)}" required /><button type="button" class="remove-utility" data-remove-utility aria-label="Remove utility">×</button></div>`;}
+  function budgetSummaryHTML() {
+    const nAllocated=customCategories().reduce((s,c)=>s+(categoryBudget(c,'needs')??0),0)+utilityForecast();
+    const wAllocated=customCategories().reduce((s,c)=>s+(categoryBudget(c,'wants')??0),0);
+    const targetNeeds=safeAmount(month().income)*0.5, targetWants=safeAmount(month().income)*0.3;
+    const allocationSummary=(label,allocated,target)=>`<div class="allocation-row"><div><strong>${label}</strong> ${money(allocated)} / ${money(target)}</div><div class="budget-metrics"><span>${target>0 ? Math.round(allocated/target*100)+'% allocated' : 'No target'}</span>${target>0?budgetRemainder(allocated,target):''}</div></div>`;
+    return allocationSummary('Needs',nAllocated,targetNeeds)+allocationSummary('Wants',wAllocated,targetWants);
+  }
   function renderBudgets() {
     $('budgetEditor').classList.toggle('hidden',!budgetsVisible);
     $('toggleBudgets').textContent=budgetsVisible?'Hide':'Adjust';
@@ -248,10 +274,7 @@
       const v1=categoryBudget(c,'needs'),v2=categoryBudget(c,'wants');
       return `<tr><td class="budget-name">${esc(c)}</td><td><input data-budget-category="${esc(c)}" data-bucket="needs" aria-label="${esc(c)} Needs budget" type="number" min="0" step="0.01" inputmode="decimal" placeholder="—" value="${v1===null?'':v1}"></td><td><input data-budget-category="${esc(c)}" data-bucket="wants" aria-label="${esc(c)} Wants budget" type="number" min="0" step="0.01" inputmode="decimal" placeholder="—" value="${v2===null?'':v2}"></td></tr>`;
     }).join('');
-    const nAllocated=customCategories().reduce((s,c)=>s+(categoryBudget(c,'needs')??0),0)+utilityForecast();
-    const wAllocated=customCategories().reduce((s,c)=>s+(categoryBudget(c,'wants')??0),0);
-    const targetNeeds=safeAmount(month().income)*0.5, targetWants=safeAmount(month().income)*0.3;
-    $('budgetEditor').innerHTML=`<div class="editor-panel"><table class="budget-table"><thead><tr><th>Category</th><th>Needs</th><th>Wants</th></tr></thead><tbody>${rows}</tbody></table><div class="budget-summary"><div>Needs <strong>${money(nAllocated)}</strong> / ${money(targetNeeds)}</div><div>Wants <strong>${money(wAllocated)}</strong> / ${money(targetWants)}</div></div></div>`;
+    $('budgetEditor').innerHTML=`<div class="editor-panel"><table class="budget-table"><thead><tr><th>Category</th><th>Needs</th><th>Wants</th></tr></thead><tbody>${rows}</tbody></table><div class="budget-summary">${budgetSummaryHTML()}</div></div>`;
   }
   function renderEntries() {
     const list=[...month().entries].sort((a,b)=>entryDate(b).localeCompare(entryDate(a)) || (b.createdAt||'').localeCompare(a.createdAt||''));
@@ -415,7 +438,11 @@
     if(text!==''&&(!Number.isFinite(n)||n<0)){alert('Budget must be zero or a positive amount.');renderBudgets();return;}
     month().budgets[c]||={needs:null,wants:null};
     month().budgets[c][b]=text===''?null:safeAmount(n);
-    save();renderBudgets();renderCategories();toast(c+' budget saved');
+    // Update the summary without replacing the focused input during its change event.
+    save();
+    const summary=$('budgetEditor').querySelector('.budget-summary');
+    if(summary)summary.innerHTML=budgetSummaryHTML();
+    renderCategories();toast(c+' budget saved');
   });
   $('editMonthUtilities').addEventListener('click',()=>{utilityEditMode=utilityEditMode==='month'?null:'month';renderUtilities();});
   $('editDefaultUtilities').addEventListener('click',()=>{utilityEditMode=utilityEditMode==='default'?null:'default';renderUtilities();});
