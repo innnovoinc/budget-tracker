@@ -23,10 +23,37 @@
     }
     return stored;
   }
+  // Version 5 adds date-only transaction dates, keeping the same storage key and schema
+  // so existing iPhone budget data and exported backups remain compatible.
+  const localToday = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+  function validDate(text) {
+    if (typeof text !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+    const [y,m,d] = text.split('-').map(Number);
+    const v = new Date(y,m-1,d);
+    return v.getFullYear()===y && v.getMonth()===m-1 && v.getDate()===d;
+  }
+  function upgradeEntryDates(stored) {
+    for (const [key, m] of Object.entries(stored.months || {})) {
+      for (const e of (m.entries || [])) {
+        if (!validDate(e.date)) {
+          const created = e.createdAt ? new Date(e.createdAt) : null;
+          const candidate = created && !Number.isNaN(created.getTime()) ?
+            `${created.getFullYear()}-${String(created.getMonth()+1).padStart(2,'0')}-${String(created.getDate()).padStart(2,'0')}` : '';
+          // Old records belonged to the selected month, which was not necessarily
+          // the month when they were entered. Keep those records in that month.
+          e.date = validDate(candidate) && candidate.startsWith(key+'-') ? candidate : `${key}-01`;
+        }
+      }
+    }
+    return stored;
+  }
   function load() {
     try {
       const stored = JSON.parse(localStorage.getItem(STORE_KEY));
-      if (stored && stored.schema === 1 && Array.isArray(stored.categories) && Array.isArray(stored.utilityDefaults) && stored.months && typeof stored.months === 'object') return migrateUtilitiesToNeeds(stored);
+      if (stored && stored.schema === 1 && Array.isArray(stored.categories) && Array.isArray(stored.utilityDefaults) && stored.months && typeof stored.months === 'object') return upgradeEntryDates(migrateUtilitiesToNeeds(stored));
     } catch (e) { console.warn('Could not read saved budget.', e); }
     return initial();
   }
@@ -38,6 +65,9 @@
   let budgetsVisible = false;
   let expandedCategory = null;
   let utilityEditMode = null;
+  let activeView = 'dashboard';
+  let selectedCalendarDay = null;
+  let expenseDateCustomized = false;
   let toastTimer;
   const money = v => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0);
   const shortMoney = v => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(Number(v)||0);
@@ -82,7 +112,7 @@
   function render() {
     $('monthLabel').textContent = monthLabel(shownMonth);
     $('incomeValue').textContent = money(month().income);
-    renderGoals(); renderCardPayments(); renderCategorySelect(); renderCategories(); renderUtilities(); renderBudgets(); renderEntries(); renderCategoryManager();
+    renderGoals(); renderCardPayments(); renderCategorySelect(); renderCategories(); renderUtilities(); renderBudgets(); renderEntries(); renderCategoryManager(); renderCalendar(); renderView();
   }
   function renderGoals() {
     const income=safeAmount(month().income);
@@ -124,6 +154,63 @@
     $('bucket').disabled=locked;
     $('bucket').title=locked?'Utilities are always assigned to Needs':'';
   }
+  function renderView() {
+    $('dashboardView').classList.toggle('hidden', activeView !== 'dashboard');
+    $('calendarView').classList.toggle('hidden', activeView !== 'calendar');
+    for (const [id, view] of [['dashboardTab','dashboard'],['calendarTab','calendar']]) {
+      const button = $(id);
+      button.classList.toggle('selected', activeView===view);
+      if (activeView===view) button.setAttribute('aria-current','page');
+      else button.removeAttribute('aria-current');
+    }
+  }
+  function setView(view) {
+    activeView = view;
+    $('settingsPanel').classList.add('hidden');
+    renderView();
+    if (view==='calendar') renderCalendar();
+  }
+  const entryDate = (e, key=shownMonth) => validDate(e.date) ? e.date : `${key}-01`;
+  const spendingForDay = date => month().entries.filter(e => isCountedExpense(e) && entryDate(e) === date).reduce((sum,e)=>sum+safeAmount(e.amount),0);
+  const dailyMoney = value => {
+    if (value >= 10000) return '$'+(value/1000).toFixed(0)+'k';
+    if (value >= 1000) return '$'+(value/1000).toFixed(1)+'k';
+    return money(value);
+  };
+  function renderCalendar() {
+    const [year,mo] = shownMonth.split('-').map(Number);
+    const firstWeekday = new Date(year,mo-1,1).getDay();
+    const days = new Date(year,mo,0).getDate();
+    const totalSpent=total('needs')+total('wants');
+    $('calendarMonthlyTotal').textContent=money(totalSpent);
+    if (selectedCalendarDay && !selectedCalendarDay.startsWith(shownMonth+'-')) selectedCalendarDay=null;
+    let cells='';
+    for(let i=0;i<firstWeekday;i++)cells+='<div class="calendar-empty" aria-hidden="true"></div>';
+    for(let day=1;day<=days;day++){
+      const date=`${shownMonth}-${String(day).padStart(2,'0')}`;
+      const amount=spendingForDay(date), spent=amount>0;
+      const isSelected=selectedCalendarDay===date;
+      const isToday=localToday()===date;
+      const aria=`${new Date(year,mo-1,day).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}: ${money(amount)} spent`;
+      cells+=`<button type="button" class="calendar-day ${spent?'has-spend':''} ${isSelected?'selected':''} ${isToday?'today':''}" data-calendar-date="${date}" aria-label="${esc(aria)}" aria-pressed="${isSelected}"><span class="calendar-date-num">${day}</span>${spent?`<span class="calendar-date-amount" title="${money(amount)}">${dailyMoney(amount)}</span>`:''}</button>`;
+    }
+    $('calendarGrid').innerHTML=cells;
+    renderCalendarDay();
+  }
+  function renderCalendarDay() {
+    const panel=$('calendarDayPanel');
+    if(!selectedCalendarDay){panel.classList.add('hidden');return;}
+    panel.classList.remove('hidden');
+    const day=selectedCalendarDay;
+    const date=new Date(Number(day.slice(0,4)),Number(day.slice(5,7))-1,Number(day.slice(8,10)));
+    const label=date.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+    const entries=month().entries.filter(e=>e.kind==='expense'&&entryDate(e)===day).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    const list=entries.map(e=>{
+      const included=isCountedExpense(e);
+      return `<div class="calendar-transaction ${included?'':'excluded-entry'}"><div class="calendar-transaction-main"><strong>${esc(e.description)}</strong><span>${esc(e.category)} · ${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment':''}</span></div><div class="calendar-transaction-side"><strong>${money(e.amount)}</strong><button type="button" data-calendar-edit="${esc(e.id)}">Edit</button></div></div>`;
+    }).join('');
+    panel.innerHTML=`<div class="section-heading"><h2>${esc(label)}</h2><strong>${money(spendingForDay(day))}</strong></div>${list || '<p class="empty-state">No expenses</p>'}<button type="button" class="small-button calendar-add" data-calendar-add="${day}">+ Add expense</button>`;
+  }
   function renderCategories() {
     $('categoryTotals').classList.toggle('hidden',!categoriesVisible);
     $('toggleCategories').textContent=categoriesVisible?'Hide':'Show';
@@ -133,7 +220,7 @@
       const needs=categoryTotal(c,'needs'), wants=categoryTotal(c,'wants'), t=needs+wants;
       const nBudget=categoryBudget(c,'needs'), wBudget=categoryBudget(c,'wants');
       const detail=expandedCategory===c;
-      const matching=month().entries.filter(e=>e.kind==='expense'&&e.category===c).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+      const matching=month().entries.filter(e=>e.kind==='expense'&&e.category===c).sort((a,b)=>entryDate(b).localeCompare(entryDate(a)) || (b.createdAt||'').localeCompare(a.createdAt||''));
       const nText=`Needs ${money(needs)}${nBudget!==null?' / '+money(nBudget):''}`;
       const wText=c==='Utilities'?'':`Wants ${money(wants)}${wBudget!==null?' / '+money(wBudget):''}`;
       return `<div class="category-row"><div class="category-head"><span class="category-title">${esc(c)}</span><span class="category-amount">${money(t)}</span></div><div class="category-split"><span class="pill-need">${esc(nText)}</span>${c==='Utilities'?'':`<span class="pill-want">${esc(wText)}</span>`}</div><button class="category-toggle" data-category-toggle="${esc(c)}" aria-expanded="${detail}">${detail?'Hide':'Show'} ${detail?'−':'+'}</button>${detail?`<div class="category-transactions">${matching.length?matching.map(e=>`<div class="category-transaction ${isCountedExpense(e)?'':'excluded-entry'}"><span>${esc(e.description)} <span class="subtle">(${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment'+(isCountedExpense(e)?'':', not counted'):''})</span></span><strong>${money(e.amount)}</strong></div>`).join(''):'<p class="empty-state">No expenses in this category yet.</p>'}</div>`:''}</div>`;
@@ -167,7 +254,7 @@
     $('budgetEditor').innerHTML=`<div class="editor-panel"><table class="budget-table"><thead><tr><th>Category</th><th>Needs</th><th>Wants</th></tr></thead><tbody>${rows}</tbody></table><div class="budget-summary"><div>Needs <strong>${money(nAllocated)}</strong> / ${money(targetNeeds)}</div><div>Wants <strong>${money(wAllocated)}</strong> / ${money(targetWants)}</div></div></div>`;
   }
   function renderEntries() {
-    const list=[...month().entries].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    const list=[...month().entries].sort((a,b)=>entryDate(b).localeCompare(entryDate(a)) || (b.createdAt||'').localeCompare(a.createdAt||''));
     $('entryCount').textContent=list.length?`${list.length} record${list.length===1?'':'s'}`:'';
     $('entries').innerHTML=list.length?list.map(e=>{
       const category=e.kind==='savings'?'Savings transfer':e.category;
@@ -175,7 +262,7 @@
       const type=e.kind==='savings'?'savings':e.cardPayment?'card':e.bucket;
       const excluded=e.kind==='expense' && !isCountedExpense(e);
       const note=e.kind==='savings'?'Savings transfer':
-        `${esc(category)} · ${e.bucket==='needs'?'Needs':'Wants'}${e.cardPayment?' · Card payment':''}`;
+        `${esc(category)} · ${e.bucket==='needs'?'Needs':'Wants'} · ${esc(entryDate(e))}${e.cardPayment?' · Card payment':''}`;
       return `<div class="activity-row ${excluded?'excluded-entry':''}"><div class="activity-icon ${type}">${symbol}</div><div class="activity-middle"><div class="activity-description">${esc(e.description)}</div><div class="activity-sub">${note}</div></div><div class="activity-right"><div class="activity-value">${e.kind==='savings'?'+':''}${money(e.amount)}</div><div class="activity-actions"><button type="button" data-edit="${esc(e.id)}">Edit</button><button type="button" class="delete" data-delete="${esc(e.id)}">Delete</button></div></div></div>`;
     }).join(''):'<p class="empty-state">No transactions this month. Add your first expense above.</p>';
   }
@@ -186,7 +273,7 @@
     const [year,mon]=shownMonth.split('-').map(Number);
     const d=new Date(year,mon-1+delta,1);
     shownMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    utilityEditMode=null; expandedCategory=null;
+    utilityEditMode=null; expandedCategory=null; selectedCalendarDay=null;
     cancelEditing(); getMonth(); render();
   }
   function toggleKind(next) {
@@ -196,11 +283,16 @@
     $('submitEntry').textContent=editingId?'Save changes':(kind==='savings'?'+ Add savings':'+ Add expense');
     $('description').placeholder=kind==='savings'?'e.g. Savings transfer':'e.g. Groceries';
   }
-  function cancelEditing() { editingId=null; $('entryForm').reset(); $('cancelEdit').classList.add('hidden'); toggleKind('expense'); renderCategorySelect(); }
+  function cancelEditing() {
+    editingId=null; expenseDateCustomized=false;
+    $('entryForm').reset(); $('expenseDate').value=localToday();
+    $('cancelEdit').classList.add('hidden'); toggleKind('expense'); renderCategorySelect();
+  }
   function editEntry(id) {
     const e=month().entries.find(entry=>entry.id===id); if(!e)return;
     editingId=id; toggleKind(e.kind==='savings'?'savings':'expense');
     $('description').value=e.description; $('amount').value=e.amount;
+    $('expenseDate').value=entryDate(e); expenseDateCustomized=true;
     if(e.kind!=='savings'){$('category').value=e.category; $('bucket').value=e.bucket; $('cardPayment').checked=!!e.cardPayment; syncUtilityBucket();}
     $('cancelEdit').classList.remove('hidden'); $('submitEntry').textContent='Save changes';
     document.querySelector('.add-card').scrollIntoView({behavior:'smooth',block:'start'});
@@ -209,10 +301,16 @@
   function addExpense(event) {
     event.preventDefault();
     const description=$('description').value.trim(); const amount=Number($('amount').value);
+    // If the date was never chosen manually, use today's actual date at submit time.
+    const date=expenseDateCustomized ? $('expenseDate').value : localToday();
     if(!description||!Number.isFinite(amount)||amount<=0){toast('Enter a description and a valid amount');return;}
+    if(!validDate(date)){toast('Choose a valid expense date');return;}
     const old=editingId?month().entries.find(e=>e.id===editingId):null;
-    const entry={id:editingId||uid(),description,amount:safeAmount(amount),kind,bucket:kind==='savings'?'savings':$('category').value==='Utilities'?'needs':$('bucket').value,category:kind==='savings'?'':$('category').value,cardPayment:kind==='expense' && $('cardPayment').checked,createdAt:old?.createdAt||new Date().toISOString()};
-    if(old)Object.assign(old,entry); else month().entries.push(entry);
+    const entry={id:editingId||uid(),description,amount:safeAmount(amount),kind,bucket:kind==='savings'?'savings':$('category').value==='Utilities'?'needs':$('bucket').value,category:kind==='savings'?'':$('category').value,cardPayment:kind==='expense' && $('cardPayment').checked,date,createdAt:old?.createdAt||new Date().toISOString()};
+    const targetKey=date.slice(0,7);
+    if(old)month().entries=month().entries.filter(e=>e.id!==old.id);
+    getMonth(targetKey).entries.push(entry);
+    shownMonth=targetKey; selectedCalendarDay=null;
     save(); cancelEditing(); render(); toast(old?'Entry updated':'Added to '+monthLabel(shownMonth));
   }
   function renameCategory(oldName) {
@@ -254,14 +352,35 @@
   }
   function csvCell(s) {return '"'+String(s??'').replace(/"/g,'""')+'"';}
   function exportCsv() {
-    const rows=[['Month','Description','Amount','Category','Needs / Wants / Savings','Credit card payment','Counted in totals']];
-    Object.keys(data.months).sort().forEach(k=>(data.months[k].entries||[]).forEach(e=>rows.push([k,e.description,e.amount,e.kind==='savings'?'Savings':e.category,e.bucket,e.cardPayment?'Yes':'No',e.kind==='savings'?'No':(e.cardPayment && data.months[k].includeCardPayments!==true?'No':'Yes')])));
+    const rows=[['Month','Date','Description','Amount','Category','Needs / Wants / Savings','Credit card payment','Counted in totals']];
+    Object.keys(data.months).sort().forEach(k=>(data.months[k].entries||[]).forEach(e=>rows.push([k,entryDate(e,k),e.description,e.amount,e.kind==='savings'?'Savings':e.category,e.bucket,e.cardPayment?'Yes':'No',e.kind==='savings'?'No':(e.cardPayment && data.months[k].includeCardPayments!==true?'No':'Yes')])));
     download('simple-budget-transactions.csv',rows.map(r=>r.map(csvCell).join(',')).join('\r\n'),'text/csv;charset=utf-8');toast('CSV downloaded');
   }
   function validateImport(obj) {
     return obj && obj.schema===1 && Array.isArray(obj.categories) && obj.categories.includes('Utilities') && obj.categories.every(s=>typeof s==='string'&&s.length<=100) && Array.isArray(obj.utilityDefaults) && obj.months && typeof obj.months==='object' && Object.values(obj.months).every(m=>m && typeof m==='object' && Array.isArray(m.entries));
   }
   // Events
+  $('dashboardTab').addEventListener('click',()=>setView('dashboard'));
+  $('calendarTab').addEventListener('click',()=>setView('calendar'));
+  $('expenseDate').addEventListener('input',()=>{expenseDateCustomized=true;});
+  $('calendarGrid').addEventListener('click',e=>{
+    const button=e.target.closest('[data-calendar-date]');
+    if(!button)return;
+    selectedCalendarDay=selectedCalendarDay===button.dataset.calendarDate ? null : button.dataset.calendarDate;
+    renderCalendar();
+  });
+  $('calendarDayPanel').addEventListener('click',e=>{
+    const edit=e.target.closest('[data-calendar-edit]');
+    if(edit){setView('dashboard');editEntry(edit.dataset.calendarEdit);return;}
+    const add=e.target.closest('[data-calendar-add]');
+    if(add){
+      cancelEditing();
+      $('expenseDate').value=add.dataset.calendarAdd; expenseDateCustomized=true;
+      setView('dashboard');
+      document.querySelector('.add-card').scrollIntoView({behavior:'smooth',block:'start'});
+      $('description').focus();
+    }
+  });
   $('prevMonth').addEventListener('click',()=>changeMonth(-1));
   $('nextMonth').addEventListener('click',()=>changeMonth(1));
   $('editIncome').addEventListener('click',()=>{$('incomeInput').value=month().income;$('modalOverlay').classList.remove('hidden');$('incomeInput').focus();});
@@ -317,8 +436,8 @@
   $('categoryManager').addEventListener('click',e=>{const rename=e.target.closest('[data-rename]');if(rename)return renameCategory(rename.dataset.rename);const rm=e.target.closest('[data-remove-category]');if(rm)removeCategory(rm.dataset.removeCategory);});
   $('exportBackup').addEventListener('click',()=>{download('simple-budget-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(data,null,2),'application/json');toast('Backup downloaded');});
   $('exportCsv').addEventListener('click',exportCsv);
-  $('importBackup').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{const raw=JSON.parse(await file.text());if(!validateImport(raw)){alert('This does not appear to be a Simple Budget backup.');return;}if(confirm('Importing a backup replaces ALL current budget data on this device. Continue?')){data=migrateUtilitiesToNeeds(raw);save();cancelEditing();render();toast('Backup imported');}}catch(err){alert('Could not open that backup file.');}finally{e.target.value='';}});
+  $('importBackup').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{const raw=JSON.parse(await file.text());if(!validateImport(raw)){alert('This does not appear to be a Simple Budget backup.');return;}if(confirm('Importing a backup replaces ALL current budget data on this device. Continue?')){data=upgradeEntryDates(migrateUtilitiesToNeeds(raw));save();cancelEditing();render();toast('Backup imported');}}catch(err){alert('Could not open that backup file.');}finally{e.target.value='';}});
   window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
-  getMonth(); save(); render();
+  getMonth(); save(); cancelEditing(); render();
   if('serviceWorker' in navigator && location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(err=>console.warn('Offline setup unavailable:',err)));
 })();

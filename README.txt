@@ -21,7 +21,7 @@ What is included
 - Quick entry and editing of expenses only; older savings-transfer records are preserved.
 - Credit card payment checkbox on expenses. These transactions remain in history
   but are EXCLUDED from Needs, Wants, category totals, and calculated Savings
-  unless you enable "Count card payments in totals" for that month. New months
+  unless you enable "Add credit card payments" for that month. New months
   always default to excluding card payments. Existing untagged transactions
   keep counting as before.
 - Any old savings transfer records remain in history and do not change
@@ -32,10 +32,10 @@ What is included
 
 How to put it on your iPhone for free (GitHub Pages)
 ---------------------------------------------------
-1. Unzip simple-budget-iphone-app.zip on your computer.
+1. Unzip simple-budget-iphone-app-v5.zip on your computer.
 2. Sign into github.com (free account).
 3. Create a PUBLIC repository, for example "simple-budget".
-4. Upload ALL files INSIDE the simple-budget-app folder to the repository's
+4. Upload the extracted files directly to the repository's
    top level. The repository root needs index.html, app.js, styles.css,
    manifest.webmanifest, service-worker.js, and both PNG icons.
 5. Go to your repository Settings > Pages.
@@ -72,3 +72,18 @@ and do not clear its storage. The updated app also moves any previously saved
 Utilities expense entries from Wants to Needs automatically, and adds the new
 credit-card toggle without changing any old expenses. Export a JSON
 backup before making changes to your installed app.
+
+VERSION 5 — EXPENSE DATES & MONTHLY CALENDAR
+--------------------------------------------
+• Every expense has an editable date; the default is the current day when saved.
+• Tap Calendar above the dashboard to see each day of the selected month.
+• Calendar totals include recorded Needs/Wants expenses, following the month's
+  Add credit card payments toggle. Unpaid utility estimates are not expenses.
+• Tap a calendar day to see transactions or add a dated expense.
+• Editing the date to a different month moves the expense to that month.
+• Older entries are assigned their original entry day when it matches their
+  saved month; otherwise they are assigned the first day of that saved month.
+• Your existing on-device data uses the same storage key; download a JSON
+  backup before publishing any update.
+• This update changes the service-worker cache version; fully close and reopen
+  the installed app if the previous layout initially appears.

@@ -49,3 +49,34 @@
 .category-row{padding:9px 0}
 .category-split{margin-top:5px}
 .utility-item{padding:8px 0}
+
+/* v5 calendar and date-first expense entry */
+.view-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin:-2px 0 13px;background:#e9edf2;border-radius:13px}
+.view-tab{border:0;border-radius:10px;background:transparent;min-height:40px;font-weight:700;color:#6c7684;font-size:13px}
+.view-tab.selected{background:white;color:#2f6faf;box-shadow:0 1px 5px #1f2d3c14}
+.date-field{margin-top:10px}
+.date-field input{width:100%;min-height:44px;cursor:pointer}
+.calendar-card{padding:14px 10px 12px}
+.calendar-heading{margin:2px 5px 14px}
+.calendar-summary-amount{font-size:19px;font-weight:800;letter-spacing:-.5px}
+.calendar-weekdays,.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.calendar-weekdays{margin-bottom:6px}
+.calendar-weekdays span{text-align:center;font-size:10px;font-weight:650;color:#6e7986;padding:4px 0}
+.calendar-empty{min-width:0}
+.calendar-day{min-width:0;height:65px;border:1px solid #e6ebf0;border-radius:9px;padding:5px 1px 4px;background:#fff;color:#263348;display:flex;flex-direction:column;align-items:center;gap:8px;overflow:hidden;text-align:center}
+.calendar-day.has-spend{background:#e6f2fc;border-color:#d2e7f7}
+.calendar-day.today{outline:1.5px solid #a7cbed;outline-offset:-2px}
+.calendar-day.selected{outline:2px solid #2974c8;outline-offset:-2px;background:#d5eaff}
+.calendar-date-num{font-size:12px;font-weight:700;line-height:1}
+.calendar-date-amount{font-weight:800;font-size:clamp(9px,2.45vw,12px);letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.1;color:#165486}
+.calendar-day-panel .section-heading{margin-bottom:3px}
+.calendar-day-panel .section-heading>strong{font-size:15px}
+.calendar-transaction{display:flex;gap:10px;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding:11px 0}
+.calendar-transaction-main{display:flex;flex-direction:column;gap:4px;min-width:0}
+.calendar-transaction-main strong{font-size:13px;overflow-wrap:anywhere}
+.calendar-transaction-main span{font-size:11px;color:var(--muted)}
+.calendar-transaction-side{display:flex;align-items:flex-end;flex-direction:column;gap:5px;flex-shrink:0;font-size:13px}
+.calendar-transaction-side button{border:0;background:none;padding:0;color:var(--blue);font-size:12px}
+.calendar-add{margin-top:8px}
+@media(min-width:600px){.calendar-card{padding:18px}.calendar-day{height:78px}.calendar-date-num{font-size:13px}.calendar-date-amount{font-size:13px}}
+@media(max-width:350px){.calendar-weekdays,.calendar-grid{gap:3px}.calendar-day{height:58px;border-radius:7px}.calendar-date-amount{font-size:9px}}
